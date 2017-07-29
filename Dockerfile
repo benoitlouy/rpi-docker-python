@@ -48,45 +48,34 @@ RUN gpg --keyserver keyring.debian.org --recv-keys 4DE8FF2A63C7CC90 \
     && gpg --keyserver pgp.mit.edu  --recv-key 6E3CBCE93372DCFA \
     && gpg --keyserver pgp.mit.edu --recv-keys 0x52a43a1e4b77b059
 
-ENV PYTHON_VERSION 3.5.2
+ENV PYTHON_VERSION 3.6.1
 
 # if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
 ENV PYTHON_PIP_VERSION 9.0.1
-ENV PYTHON_PIP_SHA256 d03fabbc4fbf2fbfc2f97307960aef2b3ca4c880ecda993dcc35957e33d7cd76
 
-ENV SETUPTOOLS_SHA256 197b0c1e69a29c3a9eab446ef0a1884890da0c9784b8f556d0c64071819991d6
-ENV SETUPTOOLS_VERSION 28.6.1
+ENV SETUPTOOLS_VERSION 34.3.3
+
 
 RUN set -x \
-    && curl -SLO "http://resin-packages.s3.amazonaws.com/python/v$PYTHON_VERSION/Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" \
-    && echo "31ccb530df0d099522c41e7a67b43b56b1ea78f844f32cba86b72f9d24636054  Python-3.5.2.linux-armv7hf.tar.gz" | sha256sum -c - \
-    && tar -xzf "Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" --strip-components=1 \
-    && rm -rf "Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" \
-    && ldconfig \
-    && mkdir -p /usr/src/python/setuptools \
-    && curl -SLO https://github.com/pypa/setuptools/archive/v$SETUPTOOLS_VERSION.tar.gz \
-    && echo "$SETUPTOOLS_SHA256  v$SETUPTOOLS_VERSION.tar.gz" > v$SETUPTOOLS_VERSION.tar.gz.sha256sum \
-    && sha256sum -c v$SETUPTOOLS_VERSION.tar.gz.sha256sum \
-    && tar -xzC /usr/src/python/setuptools --strip-components=1 -f v$SETUPTOOLS_VERSION.tar.gz \
-    && rm -rf v$SETUPTOOLS_VERSION.tar.gz* \
-    && cd /usr/src/python/setuptools \
-    && python3 bootstrap.py \
-    && python3 easy_install.py . \
-    && mkdir -p /usr/src/python/pip \
-    && curl -SL "https://github.com/pypa/pip/archive/$PYTHON_PIP_VERSION.tar.gz" -o pip.tar.gz \
-    && echo "$PYTHON_PIP_SHA256  pip.tar.gz" > pip.tar.gz.sha256sum \
-    && sha256sum -c pip.tar.gz.sha256sum \
-    && tar -xzC /usr/src/python/pip --strip-components=1 -f pip.tar.gz \
-    && rm pip.tar.gz* \
-    && cd /usr/src/python/pip \
-    && python3 setup.py install \
-    && cd .. \
-    && find /usr/local \
-        \( -type d -a -name test -o -name tests \) \
-        -o \( -type f -a -name '*.pyc' -o -name '*.pyo' \) \
-        -exec rm -rf '{}' + \
-    && cd / \
-    && rm -rf /usr/src/python ~/.cache
+	&& curl -SLO "http://resin-packages.s3.amazonaws.com/python/v$PYTHON_VERSION/Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" \
+	&& echo "8f93b45014190cd8fbd4dd7a35aa2c34260a7370cea9ba7ed78f9a4e52cb042d  Python-3.6.1.linux-armv7hf.tar.gz" | sha256sum -c - \
+	&& tar -xzf "Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" --strip-components=1 \
+	&& rm -rf "Python-$PYTHON_VERSION.linux-armv7hf.tar.gz" \
+	&& ldconfig \
+	&& if [ ! -e /usr/local/bin/pip3 ]; then : \
+		&& curl -SLO "https://raw.githubusercontent.com/pypa/get-pip/430ba37776ae2ad89f794c7a43b90dc23bac334c/get-pip.py" \
+		&& echo "19dae841a150c86e2a09d475b5eb0602861f2a5b7761ec268049a662dbd2bd0c  get-pip.py" | sha256sum -c - \
+		&& python3 get-pip.py \
+		&& rm get-pip.py \
+	; fi \
+	&& pip3 install --no-cache-dir --upgrade --force-reinstall pip=="$PYTHON_PIP_VERSION" setuptools=="$SETUPTOOLS_VERSION" \
+	&& [ "$(pip list |tac|tac| awk -F '[ ()]+' '$1 == "pip" { print $2; exit }')" = "$PYTHON_PIP_VERSION" ] \
+	&& find /usr/local \
+		\( -type d -a -name test -o -name tests \) \
+		-o \( -type f -a -name '*.pyc' -o -name '*.pyo' \) \
+		-exec rm -rf '{}' + \
+	&& cd / \
+	&& rm -rf /usr/src/python ~/.cache
 
 # install "virtualenv", since the vast majority of users of this image will want it
 RUN pip3 install --no-cache-dir virtualenv
@@ -102,7 +91,7 @@ RUN set -x \
     && tar -xzC /usr/src/dbus-python --strip-components=1 -f dbus-python.tar.gz \
     && rm dbus-python.tar.gz* \
     && cd /usr/src/dbus-python \
-    && PYTHON=python3.5 ./configure \
+    && PYTHON=python3.6 ./configure \
     && make -j$(nproc) \
     && make install -j$(nproc) \
     && cd / \
@@ -110,12 +99,12 @@ RUN set -x \
 
 # make some useful symlinks that are expected to exist
 RUN cd /usr/local/bin \
-    && ln -sf pip3 pip \
-    && ln -sf easy_install-3.5 easy_install \
-    && ln -sf idle3 idle \
-    && ln -sf pydoc3 pydoc \
-    && ln -sf python3 python \
-    && ln -sf python3-config python-config
+	&& ln -sf pip3 pip \
+	&& { [ -e easy_install ] || ln -s easy_install-* easy_install; } \
+	&& ln -sf idle3 idle \
+	&& ln -sf pydoc3 pydoc \
+	&& ln -sf python3 python \
+	&& ln -sf python3-config python-config
 
 RUN [ "cross-build-end" ]
 
